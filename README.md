@@ -1,593 +1,485 @@
-# PC Build MILP Optimizer
-
-> **An Excel-driven PC configuration optimiser that treats building a PC as what it really is: a constrained optimisation problem.**
-
-A Python optimisation engine for finding high-utility, fully compatible PC builds under a fixed budget, using **Google OR-Tools**, integer decision variables, hardware constraints, workload-specific performance weighting, new/used pricing, budget sweeps, and Pareto analysis.
-
----
-
-## 📰 Why does this exist?
-
-PC hardware pricing has become weird.
-
-And, more importantly, different components don't necessarily become expensive at the same time.
-
-The GPU market provides a particularly good example.
-
-### 2023 — The GPU market "normalises"... sort of
-
-By the end of 2023, the extraordinary cryptocurrency-era GPU shortage had largely disappeared. TechSpot's year-end analysis described the broader GPU market as having returned to relatively normal pricing behaviour, with most RTX 40-series cards at or below MSRP.
-
-There was one rather large exception: the RTX 4090.
-
-Its lowest observed US retail price moved from roughly **$1,700 in October to $2,000 in November and December**, approximately **25% above its $1,600 MSRP**.
-
-[TechSpot — GPU Pricing Update: 2023 Year in Review](https://www.techspot.com/article/2784-gpu-pricing-update/?utm_source=chatgpt.com)
-
-The market was no longer experiencing the absurd shortages of the cryptocurrency boom, but "normal" didn't necessarily mean cheap.
-
----
-
-### 2024 — AI changes the economics
-
-The AI boom introduced another source of demand for high-performance silicon.
-
-One European market analysis found that the average wholesale selling price of its 100 most-clicked graphics cards increased from approximately **€812 in Q1 2023 to €1,913 in Q1 2024**. The analysis connected the change partly to Nvidia's increasing focus on the much more profitable AI accelerator market.
-
-At the consumer level, the picture was more nuanced. TechSpot's 2024 tracking found many mainstream GPU prices relatively flat rather than universally skyrocketing; the RTX 4070, for example, remained around $550 for an extended period.
-
-[ITscope — Graphics cards and the AI boom, Q1 2024](https://blog.itscope.com/en/itscope-market-barometer-q1-2024?utm_source=chatgpt.com)
-
-[TechSpot — 2024 GPU Pricing Update](https://www.techspot.com/article/2855-gpu-pricing-update/?utm_source=chatgpt.com)
-
-So the important observation wasn't simply:
-
-> **"Everything became more expensive."**
-
-It was that different parts of the hardware market were beginning to move differently.
-
----
-
-### 2025–2026 — It gets weird again
-
-The next major disruption came from AI-driven demand for memory and compute.
-
-Between **November 2025 and February 2026**, global GPU prices reportedly increased by around **15% on average**, with some high-end products moving considerably more.
-
-Then memory became an even bigger problem.
-
-By 2026, analyses of the memory market were describing extraordinary increases in RAM pricing as AI infrastructure consumed enormous quantities of memory and manufacturers prioritised high-value products such as HBM. One analysis suggested inflation-adjusted RAM cost per gigabyte had effectively returned to levels associated with the late 2000s.
-
-And in August 2026, another GPU price survey found some RTX 50-series median retail prices rising dramatically in only two months:
-
-| GPU              | June 2026 | August 2026 | Change |
-| ---------------- | --------: | ----------: | -----: |
-| RTX 5060         |   $369.99 |     $469.99 |   +27% |
-| RTX 5060 Ti 16GB |   $569.99 |     $804.99 |   +39% |
-| RTX 5070         |   $659.99 |     $899.99 |   +36% |
-| RTX 5090         | $4,299.99 |   $4,699.99 |    +9% |
-
-[Tom's Hardware — RTX 50-series prices spike in August 2026](https://www.tomshardware.com/pc-components/gpus/geforce-rtx-50-series-gpu-prices-spike-as-much-as-39-percent-as-blackwell-price-hikes-hit-the-us-rtx-5070-gets-a-36-percent-hike-rtx-5060-up-27-percent-at-the-median-of-newegg-listings?utm_source=chatgpt.com)
-
-The DIY PC market therefore isn't experiencing one simple uniform inflation rate.
-
-It is experiencing **component-specific disequilibrium**.
-
----
-
-# The interesting bit: one expensive component can make another cheaper
-
-This was the part that made me interested in the problem.
-
-Suppose RAM suddenly becomes extremely expensive.
-
-A rational consumer might decide:
-
-> *I'll wait before building my PC.*
-
-That doesn't just affect RAM demand.
-
-That consumer also doesn't buy:
-
-* a motherboard,
-* a CPU,
-* a PSU,
-* a case,
-* a cooler,
-* or potentially a GPU.
-
-Demand for complementary components can therefore weaken.
-
-Retailers and manufacturers may subsequently discount slower-moving inventory.
-
-The exact causal relationship is obviously more complicated than *"RAM goes up → motherboard goes down"* — supply contracts, inventories, product launches, regional pricing and manufacturer strategy all matter.
-
-But the underlying idea is important:
-
-**PC component markets don't necessarily move together.**
-
-A terrible time to buy one component can simultaneously create an unusually attractive price for another.
-
-Recent reports have even documented retailers bundling extremely scarce GPUs with multiple motherboards and other components, apparently as a mechanism for moving slower-selling inventory.
-
-And that creates an interesting optimisation problem.
-
----
-
-# 💡 The idea
-
-Instead of asking:
-
-> **"What is the best PC?"**
-
-I wanted to ask:
-
-> **"Given everything actually available to me right now — new and second-hand — what combination of components produces the highest utility without exceeding my budget?"**
-
-That's subtly different.
-
-A £450 used GPU might dominate a £600 new GPU.
-
-A 24 GB GPU might be considerably more useful for local AI workloads than a faster gaming GPU with 12 GB.
-
-A discounted motherboard might justify moving from one CPU platform to another.
-
-Spending £70 more on the GPU might be worthwhile if £70 can simultaneously be recovered by choosing a motherboard currently trading unusually cheaply.
-
-And the "best" build changes depending on whether I care about:
-
-**AI development, animation/rendering, gaming, price/performance, reliability, new-vs-used risk, or some weighted combination of all of them.**
-
-At that point, manually comparing builds becomes increasingly stupid.
-
-So I turned it into an optimisation problem.
-
----
-
-# 🧮 What this repository actually does
-
-The basic pipeline is:
+# PC Build Optimizer
+
+An Excel-driven Python application for finding high-utility, compatible PC
+builds under a configurable budget. It supports AI, animation, gaming, and value
+priorities; new and used parts; hard hardware constraints; Top-N results; budget
+sweeps; and Pareto analysis.
+
+The project includes both a transparent brute-force reference implementation and
+a scalable Google OR-Tools CP-SAT solver. For the market context and motivation
+behind the project, see [background.md](background.md).
+
+## Features
+
+- Excel database designed for manual maintenance
+- Input validation with part-specific error messages
+- CPU/socket, RAM, clearance, power, budget, and capacity constraints
+- Configurable workload profiles and minimum requirements
+- Transparent used-component risk penalties
+- Best-build and Top-N optimisation
+- Exact brute-force baseline and CP-SAT solver
+- Configurable budget sweeps
+- Pareto-optimal build detection
+- Excel reports containing the actual selected components
+- Performance-versus-budget and Pareto plots
+
+## How it works
 
 ```text
-PC_Parts.xlsx
-      │
-      ▼
-Data validation
-      │
-      ▼
-Compatibility engine
-      │
-      ▼
-Performance / utility scoring
-      │
-      ▼
-Integer optimisation
-      │
-      ▼
-Top-N compatible builds
-      │
-      ├── Budget sweep
-      ├── Workload profiles
-      └── Pareto analysis
-      │
-      ▼
-Optimised_Builds.xlsx
+data/pc_parts.xlsx
+        │
+        ▼
+Input validation
+        │
+        ▼
+Compatibility and minimum requirements
+        │
+        ▼
+Workload scoring and used-part risk
+        │
+        ▼
+Brute force or OR-Tools CP-SAT
+        │
+        ├── Top-N builds
+        ├── Budget sweep
+        └── Pareto frontier
+        │
+        ▼
+output/optimised_builds.xlsx + output/plots/
 ```
 
-Excel deliberately remains the human-facing database.
+## Requirements
 
-I manually enter real components that I can actually purchase:
+- Python 3.11 or newer
+- Microsoft Excel, LibreOffice, or another `.xlsx` editor for maintaining parts
+- macOS, Linux, or Windows
 
-```text
-Component
-Model
-Condition
-Seller
-Price
-Shipping
-Warranty
-VRAM
-RAM
-Socket
-Power
-Dimensions
-Performance data
-...
-```
+## Installation
 
-Python handles the part humans are bad at:
-
-**systematically evaluating combinations.**
-
----
-
-# ⚙️ Optimisation model
-
-The problem is fundamentally a **0–1 integer optimisation problem**.
-
-For every purchasable component (i), define:
-
-[
-x_i \in {0,1}
-]
-
-where:
-
-```text
-xᵢ = 1  → buy the component
-xᵢ = 0  → don't buy the component
-```
-
-A simplified objective is:
-
-[
-\max \sum_i U_i x_i
-]
-
-where (U_i) represents the contribution of a component to the overall utility of the build.
-
-The optimiser operates subject to constraints.
-
-For example:
-
-[
-\text{Total Cost} \leq \text{Budget}
-]
-
-and:
-
-[
-\sum_{\text{CPU}}x_i = 1
-]
-
-[
-\sum_{\text{GPU}}x_i = 1
-]
-
-[
-\sum_{\text{Motherboard}}x_i = 1
-]
-
-along with compatibility and hardware requirements.
-
----
-
-## Solver
-
-The production optimisation engine uses **Google OR-Tools CP-SAT**.
-
-Technically, CP-SAT is a constraint-programming/SAT-based integer solver rather than a traditional LP-relaxation MILP solver.
-
-The model itself, however, naturally resembles a **binary mixed/integer optimisation formulation**, with component-selection variables and linear/logical constraints.
-
-That makes CP-SAT particularly useful here because PC configuration contains a large number of discrete decisions:
-
-```text
-Select / don't select
-Compatible / incompatible
-New / used
-AM5 / LGA1700
-DDR4 / DDR5
-Fits / doesn't fit
-Enough power / insufficient power
-```
-
-[Google OR-Tools Optimization Documentation](https://developers.google.com/optimization?utm_source=chatgpt.com)
-
-A simple brute-force implementation is also retained as a transparent baseline and correctness check.
-
----
-
-# 🎯 Multi-objective utility
-
-There isn't one universal definition of a "good PC."
-
-The repository therefore supports configurable priorities.
-
-For example:
-
-```yaml
-weights:
-  ai: 0.50
-  animation: 0.30
-  gaming: 0.20
-```
-
-A different user could instead choose:
-
-```yaml
-weights:
-  ai: 0.10
-  animation: 0.10
-  gaming: 0.80
-```
-
-Same market.
-
-Same components.
-
-Same budget.
-
-Potentially a completely different optimal machine.
-
----
-
-# 🤖 AI-first optimisation
-
-One motivation for building this was that traditional gaming-oriented price/performance comparisons don't necessarily represent my workload.
-
-For local AI development, factors such as:
-
-* GPU architecture
-* VRAM capacity
-* CUDA/software support
-* memory bandwidth
-* system RAM
-* CPU capability
-* storage
-
-can matter differently from average gaming FPS.
-
-A second-hand 24 GB GPU may therefore remain extremely attractive for certain workloads even when a newer GPU provides superior gaming efficiency.
-
-The scoring system keeps workload-specific performance separate so those trade-offs remain visible rather than being collapsed prematurely into one generic "performance" number.
-
----
-
-# ♻️ New vs used
-
-Second-hand hardware is treated as another optimisation dimension rather than automatically being considered better or worse.
-
-The database can contain:
-
-```text
-RTX XXXX | New  | £600
-RTX XXXX | Used | £430
-```
-
-as two separate purchasing options.
-
-The optimiser can account for:
-
-* effective purchase price,
-* warranty,
-* condition,
-* seller type,
-* component-specific risk,
-* and configurable used-hardware penalties.
-
-This means a used component only wins when its additional utility per pound compensates for the risk assigned to it.
-
----
-
-# 🔌 Compatibility constraints
-
-A £1,200 collection of individually excellent components is useless if they don't form a computer.
-
-The optimisation therefore enforces constraints such as:
-
-```text
-CPU socket = motherboard socket
-
-RAM generation = motherboard RAM generation
-
-GPU length <= case GPU clearance
-
-Cooler height <= case cooler clearance
-
-PSU capacity >= estimated system load × safety factor
-
-RAM >= configured minimum
-
-VRAM >= configured minimum
-
-Storage >= configured minimum
-
-Total effective price <= budget
-```
-
-Invalid builds never enter the final ranking.
-
----
-
-# 💷 Budget sweeps
-
-One optimal build isn't necessarily the most interesting result.
-
-The repository can repeatedly optimise across a range of budgets:
-
-```text
-£800
-£850
-£900
-£950
-...
-£1,500
-£1,550
-```
-
-This produces a performance-versus-budget curve.
-
-The useful question then becomes:
-
-> **Where does spending another £50 stop producing a meaningful improvement?**
-
-That helps identify the **price/performance knee** rather than blindly spending the maximum available budget.
-
----
-
-# 📈 Pareto frontier
-
-Sometimes there is no single best machine.
-
-Imagine:
-
-```text
-Build A
-£1,180
-AI: 98
-Gaming: 82
-
-Build B
-£1,210
-AI: 91
-Gaming: 95
-
-Build C
-£1,245
-AI: 95
-Gaming: 91
-```
-
-None universally dominates the others.
-
-The repository therefore identifies **Pareto-optimal configurations**: builds where improving one objective requires sacrificing another.
-
-This lets the final decision remain a human one.
-
-The optimiser removes bad choices.
-
-It doesn't pretend subjective preferences don't exist.
-
----
-
-# 🧠 And, admittedly, I wanted an excuse to practise optimisation
-
-There is another reason this repository exists.
-
-I wanted to properly practise **integer optimisation, constraint modelling and solver-based programming** on a problem I actually cared about.
-
-Not just:
-
-```python
-model.solve()
-```
-
-followed by pretending I understood what happened.
-
-The project is deliberately intended to involve:
-
-* defining decision variables,
-* constructing objective functions,
-* translating physical requirements into constraints,
-* thinking about discrete optimisation,
-* validating solutions,
-* comparing brute force against solver output,
-* exploring multi-objective optimisation,
-* performing Pareto analysis,
-* and understanding why the optimiser selected what it selected.
-
-And I wanted the implementation to be **hard-coded, not vibe-coded**.
-
-AI can help me debug, review ideas and explain things, but the point of this repository is for me to understand and deliberately write the important optimisation logic myself.
-
-If I can't explain a constraint mathematically, I probably shouldn't be hiding it behind an optimisation library.
-
----
-
-# 🏗️ Architecture
-
-```text
-pc-build-milp-optimizer/
-│
-├── data/
-│   └── pc_parts.xlsx
-│
-├── config/
-│   └── default_config.yaml
-│
-├── src/
-│   └── pc_optimizer/
-│       ├── data_loader.py
-│       ├── validation.py
-│       ├── compatibility.py
-│       ├── scoring.py
-│       ├── brute_force.py
-│       ├── optimizer.py
-│       ├── pareto.py
-│       ├── reporting.py
-│       └── cli.py
-│
-├── tests/
-│
-├── output/
-│   ├── optimised_builds.xlsx
-│   └── plots/
-│
-├── README.md
-├── requirements.txt
-└── pyproject.toml
-```
-
-The modules deliberately separate:
-
-**data → validation → compatibility → scoring → optimisation → reporting**
-
-so that the optimisation model remains understandable and testable.
-
----
-
-# 🚀 Example
+Clone or download the repository, enter its directory, and create an isolated
+environment:
 
 ```bash
+python -m venv .venv
+```
+
+Activate it on macOS or Linux:
+
+```bash
+source .venv/bin/activate
+```
+
+Activate it on Windows PowerShell:
+
+```powershell
+.venv\Scripts\Activate.ps1
+```
+
+Install the package and test dependencies:
+
+```bash
+python -m pip install --upgrade pip
+pip install -e ".[dev]"
+```
+
+The editable installation makes both commands available:
+
+```bash
+python -m pc_optimizer --help
+pc-optimizer --help
+```
+
+The examples below use `python -m pc_optimizer` because it is explicit and works
+consistently across platforms.
+
+## Quick start
+
+The repository includes a ready-to-edit database at `data/pc_parts.xlsx` and an
+untouched reference copy at `data/example_pc_parts.xlsx`.
+
+```bash
+python -m pc_optimizer validate
 python -m pc_optimizer optimise --budget 1250 --profile ai
 ```
 
-Example conceptual output:
+The result is written to:
 
 ```text
-OPTIMAL BUILD
-Budget: £1,250
-
-CPU          Ryzen 9 7900              Used     £235
-GPU          RTX 3090 24GB             Used     £445
-Motherboard  B650 Gaming X AX          New      £125
-RAM          32GB DDR5-6000            New       £75
-SSD          2TB NVMe                  New       £90
-PSU          850W Gold                 New       £90
-Case         Fractal Pop Air           New       £70
-Cooler       Phantom Spirit            New       £38
-
-TOTAL                                  £1,168
-
-AI Score          94.2
-Animation Score   91.8
-Gaming Score      86.4
-Overall Utility   92.7
+output/optimised_builds.xlsx
 ```
 
-The numbers above are illustrative only.
+The bundled rows and scores are synthetic examples only. Replace them with
+parts and evidence-based scores relevant to your market before making a purchase.
 
-Real optimisation is only as meaningful as the benchmark and market data supplied to the model.
+## Creating and maintaining `pc_parts.xlsx`
 
----
+### Recommended method
 
-# ⚠️ What this project does **not** claim
+1. Open `data/pc_parts.xlsx` in Excel.
+2. Delete the synthetic example rows you do not want.
+3. Add one row for every purchasing option you could actually buy.
+4. Keep the existing column names unchanged.
+5. Extend the Excel table to include newly added rows if Excel does not do so
+   automatically.
+6. Copy the `Effective_Price_GBP` formula into every new row.
+7. Save the file as `data/pc_parts.xlsx`.
+8. Run validation before optimisation.
 
-This repository does not magically know the objective value of a GPU.
+```bash
+python -m pc_optimizer validate
+```
 
-Garbage in still means garbage out.
+To regenerate both workbook templates from code:
 
-Performance scores must ultimately be supported by appropriate benchmark data, and second-hand risk cannot be represented perfectly by a scalar penalty.
+```bash
+python scripts/create_example_workbook.py
+```
 
-The optimiser answers:
+This overwrites both template workbooks, so do not run it after entering data
+unless your edited workbook is backed up.
 
-> **"Given these data, assumptions, constraints and preferences, what is mathematically optimal?"**
+### One row means one purchasing option
 
-It does **not** answer:
+New, used, refurbished, seller-specific, and variant-specific listings must be
+separate rows with unique `Part_ID` values:
 
-> **"What is objectively the world's best PC?"**
+| Part_ID | Type | Model | Condition | Seller | Price_GBP |
+| --- | --- | --- | --- | --- | ---: |
+| GPU-001 | GPU | RTX 3090 24GB | Used | eBay seller A | 450 |
+| GPU-002 | GPU | RTX 3090 24GB | New | Retailer B | 700 |
+| GPU-003 | GPU | RTX 4070 12GB | Used | CeX | 390 |
 
-That distinction matters.
+Do not combine a price range, multiple sellers, or new and used stock in one row.
 
----
+### Required for every row
 
-# 🔮 Future work
+| Column | Meaning |
+| --- | --- |
+| `Part_ID` | Stable, unique identifier such as `CPU-001` |
+| `Type` | `CPU`, `GPU`, `Motherboard`, `RAM`, `SSD`, `PSU`, `Case`, or `CPU Cooler` |
+| `Brand` | Manufacturer or brand |
+| `Model` | Human-readable model name |
+| `Condition` | `New`, `Open Box`, `Refurbished`, or `Used` |
+| `Price_GBP` | Item price, excluding shipping |
+| `Shipping_GBP` | Delivery cost; enter `0` when included |
+| `Effective_Price_GBP` | Formula: item price plus shipping |
 
-Potential extensions include automated price collection, historical price tracking, Blender benchmark ingestion, gaming benchmark ingestion, local-LLM inference benchmarks, CUDA-specific scoring, electricity-cost modelling, component depreciation, seller-risk modelling, price forecasting and eventually a lightweight web interface.
+`Seller`, `URL`, `Date_Found`, `Warranty_Months`, `Variant`, and `Notes` are
+strongly recommended because they make listings auditable and affect risk
+assessment where applicable.
 
-But those come later.
+### Component-specific fields
 
-The first objective is much simpler:
+Blank cells are expected when a field does not apply to a component. Populate
+the following fields for each relevant type:
 
-> **Build a transparent optimisation model, understand every important constraint, feed it real market data, and find out whether mathematics can build me a better PC than I can manually.**
+| Type | Required hardware fields |
+| --- | --- |
+| CPU | `CPU_Socket`, `CPU_Cores`, `CPU_Threads`, `Power_W` |
+| GPU | `VRAM_GB`, `GPU_Length_mm`, `Power_W` |
+| Motherboard | `Motherboard_Socket`, `Motherboard_RAM_Type`, preferably `Power_W` |
+| RAM | `RAM_GB`, `RAM_Type`, preferably `RAM_Speed_MHz` and `Power_W` |
+| SSD | `Storage_GB`, `Storage_Type`, preferably `Power_W` |
+| PSU | `PSU_W`, preferably `PSU_Efficiency` |
+| Case | `Case_Max_GPU_Length_mm`, `Case_Max_Cooler_Height_mm` |
+| CPU Cooler | `Cooler_Height_mm`, preferably `Power_W` |
+
+Socket and RAM-type text must match exactly between compatible rows. For
+example, use `AM5` on both the CPU and motherboard and `DDR5` on both the RAM and
+motherboard. Measurements are in millimetres, capacities are in GB, power is in
+watts, and all prices are GBP.
+
+### Score fields
+
+The workbook accepts normalised 0–100 user-defined scores:
+
+- `AI_Score`
+- `Animation_Score`
+- `Gaming_Score`
+- `Performance_Score`
+- `Reliability_Score`
+- `Value_Score`
+
+These are not raw benchmark columns. Keep source benchmark measurements in a
+separate worksheet or external dataset, normalise them consistently, and record
+the method and source in `Notes`. Do not mix incomparable measurements or present
+the bundled synthetic values as real benchmarks.
+
+Practical scoring guidance:
+
+- use the same 0–100 reference scale for every option;
+- compare like with like within each workload;
+- document benchmark source, date, and normalisation method;
+- avoid giving non-performance infrastructure parts exaggerated workload scores;
+- update `Value_Score` when prices change; and
+- retain URLs and dates so stale listings can be identified.
+
+### Spreadsheet quality-of-life features
+
+The generated workbook includes an Excel table, filters, frozen headers,
+condition/type dropdowns, input-cell highlighting, conditional score formatting,
+column widths, instructions, and effective-price formulas. Adding rows inside the
+table normally propagates validation and formulas automatically.
+
+## Configuration
+
+Defaults and profiles live in `config/default_config.yaml`:
+
+```yaml
+budget_gbp: 1250
+
+weights:
+  ai: 0.45
+  animation: 0.30
+  gaming: 0.20
+  value: 0.05
+
+requirements:
+  minimum_ram_gb: 32
+  minimum_vram_gb: 12
+  minimum_storage_gb: 1000
+
+used_parts:
+  allowed: true
+  maximum_used_parts: null
+  risk_penalty_enabled: true
+
+psu:
+  headroom_multiplier: 1.25
+
+results:
+  top_n: 10
+```
+
+Weights must be non-negative and sum to `1.0`. Available profiles are
+`balanced`, `ai`, `animation`, `gaming`, and `value`. Add or edit profiles in
+YAML rather than changing Python source.
+
+Use another configuration file with the global option placed before the
+subcommand:
+
+```bash
+python -m pc_optimizer --config config/my_config.yaml optimise --budget 1400
+```
+
+Likewise, use another workbook with:
+
+```bash
+python -m pc_optimizer --data data/my_parts.xlsx validate
+```
+
+## Commands
+
+### Validate the database
+
+```bash
+python -m pc_optimizer validate
+```
+
+Validation checks duplicate IDs, negative prices, unknown types or conditions,
+non-positive capacities, and missing type-specific compatibility data. Errors
+identify the affected `Part_ID` or spreadsheet row. Invalid input is not silently
+dropped.
+
+### Find the best and Top-N builds
+
+```bash
+python -m pc_optimizer optimise
+python -m pc_optimizer optimise --budget 1250
+python -m pc_optimizer optimise --budget 1250 --profile ai
+python -m pc_optimizer optimise --profile gaming --top 20
+```
+
+The CP-SAT solver is the default. To use the educational exhaustive-search
+baseline:
+
+```bash
+python -m pc_optimizer optimise --engine brute_force
+```
+
+Brute force is useful for learning and small-dataset correctness comparisons,
+but the number of combinations grows multiplicatively with the number of parts.
+
+### Run a budget sweep
+
+```bash
+python -m pc_optimizer budget-sweep --min 800 --max 1600 --step 50
+python -m pc_optimizer budget-sweep --min 900 --max 1500 --step 100 --profile ai
+```
+
+The maximum value is inclusive when it falls on the selected step. The command
+exports the best feasible build at each budget, the Pareto frontier, and plots.
+
+### Run tests
+
+```bash
+pytest
+```
+
+## Compatibility and hard constraints
+
+A returned build contains exactly one CPU, GPU, motherboard, RAM kit, PSU, case,
+CPU cooler, and—in the current implementation—one SSD. It must satisfy:
+
+```text
+CPU socket == motherboard socket
+RAM type == motherboard RAM type
+GPU length <= case GPU clearance
+cooler height <= case cooler clearance
+PSU wattage >= estimated component power × headroom multiplier
+RAM >= configured minimum
+VRAM >= configured minimum
+storage >= configured minimum
+effective price <= budget
+used-part count <= configured maximum, when set
+```
+
+These rules are hard constraints. A high-scoring incompatible build cannot enter
+the results.
+
+## Scoring model
+
+AI, animation, gaming, and value build scores are component-relevance weighted
+means, not sums. This keeps every metric on the input 0–100 scale and prevents a
+build from receiving a higher score merely because it contains more parts.
+
+For example, the GPU contributes 55% of the AI relevance weight, while the CPU
+contributes 18%; RAM, storage, and supporting components provide the remainder.
+Animation gives more weight to the CPU, and gaming strongly weights both the GPU
+and CPU. Exact relevance weights are documented in
+`src/pc_optimizer/scoring.py`.
+
+```text
+overall = ai_weight × AI
+        + animation_weight × animation
+        + gaming_weight × gaming
+        + value_weight × value
+        - used_part_risk_penalty
+```
+
+Missing workload scores do not contribute to that metric's weighted mean.
+
+## Used-component risk
+
+New and second-hand options compete directly on price and utility. Non-new parts
+receive a small, transparent penalty determined by:
+
+- component type—the default penalty is greater for GPUs and PSUs than RAM;
+- condition—open-box and refurbished parts receive smaller factors than used;
+- warranty—longer warranty reduces, but does not entirely remove, the penalty.
+
+Risk penalties can be disabled in YAML. Set `allowed: false` to require an
+all-new build, or set `maximum_used_parts` to an integer to cap used selections.
+
+## Outputs
+
+### Optimisation workbook
+
+`output/optimised_builds.xlsx` includes selected part IDs and models, total cost,
+used-part count, workload scores, risk penalty, and overall score. A normal
+optimisation produces best-build and Top-N/profile sheets. A budget sweep writes
+budget and Pareto sheets.
+
+Running a new command replaces the existing output workbook. Copy important
+results elsewhere before another run.
+
+### Plots
+
+A budget sweep generates these files in `output/plots/`:
+
+- `budget_vs_ai.png`
+- `budget_vs_animation.png`
+- `budget_vs_gaming.png`
+- `budget_vs_overall.png`
+- `pareto_frontier.png`
+
+The curves help identify diminishing returns. The Pareto frontier contains
+builds for which no alternative is simultaneously no more expensive, at least
+as good in AI, animation, and gaming, and strictly better on at least one of
+those dimensions.
+
+## Repository structure
+
+```text
+pc-build-milp-optimizer/
+├── background.md
+├── README.md
+├── config/
+│   └── default_config.yaml
+├── data/
+│   ├── pc_parts.xlsx
+│   └── example_pc_parts.xlsx
+├── output/
+│   └── plots/
+├── scripts/
+│   ├── budget_sweep.py
+│   ├── create_example_workbook.py
+│   └── run_optimizer.py
+├── src/pc_optimizer/
+│   ├── brute_force.py
+│   ├── cli.py
+│   ├── compatibility.py
+│   ├── config.py
+│   ├── data_loader.py
+│   ├── models.py
+│   ├── optimizer.py
+│   ├── pareto.py
+│   ├── reporting.py
+│   ├── scoring.py
+│   └── validation.py
+└── tests/
+```
+
+The modules deliberately separate data loading, validation, compatibility,
+scoring, optimisation, Pareto analysis, and reporting so each rule remains
+understandable and testable.
+
+## Troubleshooting
+
+### `No valid build found`
+
+Check whether the budget can cover one of every required component, then review
+minimum RAM, VRAM, and storage. Also confirm socket/RAM compatibility, case
+clearances, PSU capacity, and used-part limits.
+
+### A valid-looking row fails validation
+
+Ensure the `Type` and `Condition` values match the supported dropdown values,
+IDs are unique, numeric cells contain numbers rather than units such as `850W`,
+and every relevant compatibility field is populated.
+
+### `No module named pc_optimizer`
+
+Activate the virtual environment and install the project:
+
+```bash
+pip install -e ".[dev]"
+```
+
+### Excel formulas were not copied
+
+Set `Effective_Price_GBP` to `Price_GBP + Shipping_GBP` for the affected row. If
+the table formatting has been damaged, make a backup and regenerate a clean
+workbook template with `python scripts/create_example_workbook.py`.
+
+## Current limitations
+
+- Scores are manually supplied and are not automatically derived from benchmarks.
+- Exactly one storage device is currently selected.
+- Compatibility does not yet cover every form factor, connector, BIOS, cooler
+  mount, PCIe lane, or transient-power consideration.
+- Prices and listing availability are not scraped or updated automatically.
+- Used-market risk is necessarily an approximation.
+- Pareto analysis is performed over the builds supplied to it, not every
+  imaginable hardware configuration.
+
+Always independently verify current prices, seller legitimacy, physical fit,
+firmware support, connectors, and manufacturer power recommendations before
+purchasing hardware.
+
+## Future development
+
+The architecture leaves room for raw benchmark ingestion, Blender and gaming
+datasets, local-LLM inference measurements, CUDA-aware scoring, multiple storage
+devices, automated price collection, price history, electricity-cost modelling,
+seller reliability, depreciation, forecasting, and a web interface.

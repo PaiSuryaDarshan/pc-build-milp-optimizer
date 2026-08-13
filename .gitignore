@@ -216,3 +216,45 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Operating-system metadata
+.DS_Store
+.AppleDouble
+.LSOverride
+Thumbs.db
+Desktop.ini
+
+# Editors and local IDE settings
+.idea/
+.vscode/
+*.code-workspace
+*.swp
+*.swo
+*~
+
+# Local secrets and environment overrides
+.env.*
+!.env.example
+*.local.yaml
+*.local.yml
+
+# Excel/LibreOffice lock and recovery files
+~$*.xlsx
+~$*.xlsm
+*.tmp
+*.bak
+
+# Project-generated reports and plots; retain directory placeholders
+output/**
+!output/.gitkeep
+!output/plots/
+output/plots/**
+!output/plots/.gitkeep
+
+# Local profiling and solver artefacts
+*.prof
+*.lprof
+*.lp
+*.mps
+*.sol
+*.log
